@@ -5,11 +5,23 @@ st.set_page_config(page_title="Cohort Retention", layout="wide")
 
 
 # =====================================================
+# FILE UPLOAD
+# =====================================================
+uploaded_file = st.sidebar.file_uploader(
+    "📂 Tải file parquet (nếu không tải sẽ dùng file mặc định)",
+    type=["parquet"]
+)
+
+
+# =====================================================
 # LOAD DATA
 # =====================================================
 @st.cache_data(show_spinner=False)
-def load_data():
-    df = pd.read_parquet("data/crm_cohort.parquet")
+def load_data(uploaded_file):
+    if uploaded_file is not None:
+        df = pd.read_parquet(uploaded_file)
+    else:
+        df = pd.read_parquet("data/crm_cohort.parquet")
 
     if df is None or df.empty:
         return pd.DataFrame()
@@ -120,11 +132,17 @@ def apply_filters(df: pd.DataFrame, start_date, end_date, loaiCT, brand, region,
 # =====================================================
 st.title("🏅 Cohort Retention")
 
-df = load_data()
+df = load_data(uploaded_file)
+
+if uploaded_file is not None:
+    st.sidebar.success("✅ Đang dùng file parquet bạn tải lên")
+else:
+    st.sidebar.info("📦 Đang dùng file mặc định: data/crm_cohort.parquet")
+
 st.sidebar.caption(f"RAM df ~ {df.memory_usage(deep=True).sum() / 1024**2:.1f} MB" if not df.empty else "RAM df ~ 0.0 MB")
 
 if df.empty:
-    st.warning("⚠ Không có dữ liệu để phân tích. Kiểm tra lại file data/crm_cohort.parquet")
+    st.warning("⚠ Không có dữ liệu để phân tích. Kiểm tra lại file parquet.")
     st.stop()
 
 
@@ -176,8 +194,7 @@ with st.sidebar:
     )
 
     st.subheader("⚙️ Cohort Retention")
-    MAX_MONTH = st.sidebar.slider("Giới hạn số tháng retention", 3, 12, 7)
-
+    MAX_MONTH = st.slider("Giới hạn số tháng retention", 3, 12, 7)
 
 df_f = apply_filters(
     df,
@@ -197,6 +214,11 @@ if df_f.empty:
 # =====================================================
 # COHORT RETENTION
 # =====================================================
+if "Số_điện_thoại" not in df_f.columns or "Ngày" not in df_f.columns:
+    st.error("❌ File thiếu cột bắt buộc: 'Số_điện_thoại' hoặc 'Ngày'")
+    st.write("Các cột hiện có:", list(df_f.columns))
+    st.stop()
+
 df_cohort = df_f.copy()
 
 df_cohort["Order_Month"] = df_cohort["Ngày"].dt.to_period("M")
@@ -264,7 +286,14 @@ else:
 
 
 # =====================================================
-# RESET FILTERS
+# DEBUG COLUMNS
+# =====================================================
+with st.expander("🔍 Xem danh sách cột trong file hiện tại"):
+    st.write(list(df.columns))
+
+
+# =====================================================
+# RESET
 # =====================================================
 with st.sidebar:
     if st.button("🔄 Reset filters"):
@@ -275,4 +304,8 @@ with st.sidebar:
             "store_filter",
         ]:
             st.session_state.pop(k, None)
+        st.rerun()
+
+    if st.button("♻️ Reset cache"):
+        st.cache_data.clear()
         st.rerun()
